@@ -5,6 +5,7 @@ env/
 
 # Documentation & IP
 ml/
+conductor/
 TECHNICAL_REPORT.md
 *.joblib
 *.pth
