@@ -3,8 +3,9 @@ venv/
 .venv/
 env/
 
-# ML & Intellectual Property (Secret Sauce)
+# Documentation & IP
 ml/
+TECHNICAL_REPORT.md
 *.joblib
 *.pth
 *.gz
