@@ -1,0 +1,27 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# ML & Intellectual Property (Secret Sauce)
+ml/
+*.joblib
+*.pth
+*.gz
+*.csv
+
+# Docker Volumes & Data
+volumes/mqtt/data/
+spark/data/checkpoint_filtrees/
+spark/data/checkpoint_kpi/
+
+# Python artifacts
+__pycache__/
+*.pyc
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Config (optional, but keeps local counts private)
+config.json

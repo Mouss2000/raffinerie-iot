@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raffinerie IoT - Control Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .console-log {
+            font-family: 'Courier New', Courier, monospace;
+            background: #000;
+            color: #0f0;
+            height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+            font-size: 12px;
+            border-radius: 8px;
+        }
+        .alert-entry { border-left: 3px solid #f00; padding-left: 10px; margin-bottom: 5px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-10">
+            <h1 class="text-3xl font-bold text-blue-400">Refinery IoT Control Center</h1>
+            <div class="flex gap-4">
+                <button onclick="controlPipeline('start')" class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded font-bold transition">START PIPELINE</button>
+                <button onclick="controlPipeline('stop')" class="bg-red-600 hover:bg-red-700 px-6 py-2 rounded font-bold transition">STOP PIPELINE</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+            <!-- Stats & Status -->
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-semibold mb-4 border-b border-gray-700 pb-2 text-gray-400">System Status</h2>
+                <div class="space-y-2 mb-6 text-sm">
+                    <div class="flex justify-between"><span>Simulator:</span><span id="status-simulator">...</span></div>
+                    <div class="flex justify-between"><span>MQTT Bridge:</span><span id="status-bridge">...</span></div>
+                    <div class="flex justify-between"><span>ML Engine:</span><span id="status-inference">...</span></div>
+                </div>
+                <h2 class="text-lg font-semibold mb-4 border-b border-gray-700 pb-2 text-gray-400">AI Safety Reference</h2>
+                <div class="bg-blue-900/30 p-4 rounded-lg border border-blue-500/50 mb-6">
+                    <div class="text-xs text-blue-300 font-bold uppercase mb-2">Safe Operating Capacity</div>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm">Temperature</span>
+                            <span class="text-xs font-mono bg-blue-900 px-2 py-1 rounded">Avg: 75°C | Max: 187°C</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm">Vibration</span>
+                            <span class="text-xs font-mono bg-blue-900 px-2 py-1 rounded">Avg: 2.5 | Max: 5.6 mm/s</span>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-[10px] text-blue-400 leading-tight italic">
+                        *Baselines derived from 125,620 real-world data points during Super Training.
+                    </div>
+                </div>
+
+                <h2 class="text-lg font-semibold mb-4 border-b border-gray-700 pb-2 text-gray-400">Configuration</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-xs text-gray-500">Machine Count</label>
+                        <input type="number" id="input-sensors" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 mt-1">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">ML Alert Threshold (Δ)</label>
+                        <input type="number" step="0.5" id="input-threshold" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 mt-1">
+                    </div>
+                    <button onclick="updateConfig()" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded text-sm font-bold">APPLY</button>
+                </div>
+            </div>
+
+            <!-- Real-time Chart -->
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 lg:col-span-2">
+                <h2 class="text-lg font-semibold mb-2 text-gray-400">Real-Time Temperature Stream</h2>
+                <div style="height: 300px;"><canvas id="sensorChart"></canvas></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- ML Comparison Chart -->
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 lg:col-span-2">
+                <h2 class="text-lg font-semibold mb-2 text-gray-400">AI Performance: Actual vs Predicted</h2>
+                <div style="height: 300px;"><canvas id="mlChart"></canvas></div>
+            </div>
+
+            <!-- Alert Console -->
+            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+                <h2 class="text-lg font-semibold mb-4 text-red-400 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    Predictive Alert Console
+                </h2>
+                <div id="alertConsole" class="console-log">
+                    <div class="text-gray-500 italic">Waiting for anomalies...</div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="mt-10 text-center text-gray-600 text-sm">
+            Refinery IoT Framework - Mission: Predictive Intelligence
+        </footer>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000/api';
+        let sensorChart, mlChart;
+
+        // Initialize Charts
+        function initCharts() {
+            const ctxSensor = document.getElementById('sensorChart').getContext('2d');
+            sensorChart = new Chart(ctxSensor, {
+                type: 'line',
+                data: { 
+                    labels: [], 
+                    datasets: [
+                        { label: 'Temp (°C)', data: [], borderColor: '#3b82f6', tension: 0.3, yAxisID: 'y' },
+                        { label: 'Vibration (mm/s)', data: [], borderColor: '#10b981', tension: 0.3, yAxisID: 'yVib' }
+                    ] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    scales: { 
+                        y: { type: 'linear', position: 'left', min: -50, max: 200, title: { display: true, text: 'Temp' } },
+                        yVib: { type: 'linear', position: 'right', min: -1, max: 7, grid: { drawOnChartArea: false }, title: { display: true, text: 'Vibration' } },
+                        x: { display: false } 
+                    } 
+                }
+            });
+
+            const ctxML = document.getElementById('mlChart').getContext('2d');
+            mlChart = new Chart(ctxML, {
+                type: 'line',
+                data: { 
+                    labels: [], 
+                    datasets: [
+                        { label: 'Temp (°C)', data: [], borderColor: '#3b82f6', tension: 0.3, borderDash: [5, 5], yAxisID: 'y' },
+                        { label: 'Vib (mm/s)', data: [], borderColor: '#10b981', tension: 0.3, borderDash: [2, 2], yAxisID: 'yVib' },
+                        { label: 'Anomaly Score (IF)', data: [], borderColor: '#fbbf24', tension: 0.3, yAxisID: 'yScore' }
+                    ] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    scales: { 
+                        y: { type: 'linear', position: 'left', min: -50, max: 200, title: { display: true, text: 'Temp' } },
+                        yVib: { type: 'linear', position: 'right', min: -1, max: 7, grid: { drawOnChartArea: false }, title: { display: true, text: 'Vib' } },
+                        yScore: { type: 'linear', position: 'right', min: -1.2, max: 1.0, grid: { drawOnChartArea: false }, title: { display: true, text: 'AI Score' } },
+                        x: { display: false } 
+                    } 
+                }
+            });
+        }
+
+        async function updateDashboard() {
+            try {
+                const statusRes = await fetch(`${API_URL}/status`);
+                const status = await statusRes.json();
+                updateStatus('status-simulator', status.simulator);
+                updateStatus('status-bridge', status.bridge);
+                updateStatus('status-inference', status.inference);
+                
+                // Update Sensor Data Chart
+                const sensorRes = await fetch(`${API_URL}/data/sensors`);
+                const sensorData = await sensorRes.json();
+                
+                // Group data by timestamp to align lines
+                const labels = [...new Set(sensorData.map(d => d.timestamp))].sort().slice(-30);
+                const temps = [];
+                const vibs = [];
+
+                labels.forEach(ts => {
+                    const t = sensorData.find(d => d.timestamp === ts && d.type_capteur === 'temperature');
+                    const v = sensorData.find(d => d.timestamp === ts && d.type_capteur === 'vibration');
+                    temps.push(t ? t.valeur : null);
+                    vibs.push(v ? v.valeur : null);
+                });
+
+                sensorChart.data.labels = labels.map(l => new Date(l).toLocaleTimeString());
+                sensorChart.data.datasets[0].data = temps;
+                sensorChart.data.datasets[1].data = vibs;
+                sensorChart.update('none');
+
+                // Update ML Chart
+                const mlRes = await fetch(`${API_URL}/data/predictions`);
+                const mlData = await mlRes.json();
+                
+                mlChart.data.labels = mlData.map(d => new Date(d.timestamp).toLocaleTimeString()).reverse();
+                mlChart.data.datasets[0].data = mlData.map(d => d.valeur_actuelle).reverse(); // Temp
+                mlChart.data.datasets[1].data = mlData.map(d => d.ecart).reverse();           // Vib (stored in ecart)
+                mlChart.data.datasets[2].data = mlData.map(d => d.valeur_predite).reverse();  // Score
+                mlChart.update('none');
+
+                // Update Console
+                const alertRes = await fetch(`${API_URL}/data/alerts`);
+                const alerts = await alertRes.json();
+                const consoleEl = document.getElementById('alertConsole');
+                if (alerts.length > 0) {
+                    consoleEl.innerHTML = alerts.map(a => `
+                        <div class="alert-entry">
+                            <span class="text-gray-500">[${new Date(a.timestamp).toLocaleTimeString()}]</span>
+                            <span class="font-bold text-yellow-500">${a.machine_id}</span>: 
+                            Score: ${parseFloat(a.valeur_predite).toFixed(3)} | T: ${parseFloat(a.valeur_actuelle).toFixed(1)} V: ${parseFloat(a.ecart).toFixed(2)}
+                        </div>
+                    `).join('');
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        function updateStatus(id, active) {
+            const el = document.getElementById(id);
+            el.innerText = active ? 'RUNNING' : 'OFF';
+            el.className = active ? 'text-green-400 font-bold' : 'text-red-500';
+        }
+
+        async function controlPipeline(action) {
+            await fetch(`${API_URL}/pipeline/${action}`, { method: 'POST' });
+            setTimeout(updateDashboard, 500);
+        }
+
+        async function updateConfig() {
+            const body = {
+                sensor_count: parseInt(document.getElementById('input-sensors').value),
+                ml_threshold: parseFloat(document.getElementById('input-threshold').value)
+            };
+            await fetch(`${API_URL}/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            updateDashboard();
+        }
+
+        initCharts();
+        setInterval(updateDashboard, 2000);
+        updateDashboard();
+    </script>
+</body>
+</html>
