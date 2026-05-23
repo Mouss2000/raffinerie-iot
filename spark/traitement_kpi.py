@@ -41,6 +41,7 @@ json_df.writeStream \
     .option("path", "s3a://raffinerie-raw/raw") \
     .option("checkpointLocation", "s3a://raffinerie-raw/checkpoint_raw") \
     .outputMode("append") \
+    .trigger(processingTime='2 seconds') \
     .start()
 
 # 7. Filtrer les données valides
@@ -66,6 +67,7 @@ filtrees.writeStream \
     .foreachBatch(save_filtrees_to_pg) \
     .option("checkpointLocation", "/app/data/checkpoint_filtrees") \
     .outputMode("append") \
+    .trigger(processingTime='2 seconds') \
     .start()
 
 # 10. Calcul des KPI : moyenne glissante sur 1 minute
@@ -94,5 +96,6 @@ kpi.writeStream \
     .foreachBatch(save_kpi_to_pg) \
     .option("checkpointLocation", "/app/data/checkpoint_kpi") \
     .outputMode("append") \
+    .trigger(processingTime='2 seconds') \
     .start() \
     .awaitTermination()

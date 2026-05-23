@@ -39,6 +39,7 @@ services:
   spark-job:
     build: ./spark
     container_name: spark-job
+    restart: always
     depends_on:
       - kafka
       - timescaledb
