@@ -6,6 +6,7 @@
     <title>Raffinerie IoT - Control Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
         .console-log {
             font-family: 'Courier New', Courier, monospace;
@@ -20,7 +21,7 @@
         .alert-entry { border-left: 3px solid #f00; padding-left: 10px; margin-bottom: 5px; }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen p-6">
+<body class="bg-[#1f2124] text-white min-h-screen p-6">
     <div class="max-w-6xl mx-auto">
         <header class="flex justify-between items-center mb-10">
             <h1 class="text-3xl font-bold text-blue-400">Refinery IoT Control Center</h1>
@@ -32,7 +33,7 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
             <!-- Stats & Status -->
-            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+            <div class="bg-[#2a2d31] p-5 rounded-xl border border-gray-700">
                 <h2 class="text-lg font-semibold mb-4 border-b border-gray-700 pb-2 text-gray-400">System Status</h2>
                 <div class="space-y-2 mb-6 text-sm">
                     <div class="flex justify-between"><span>Simulator:</span><span id="status-simulator">...</span></div>
@@ -71,22 +72,28 @@
                 </div>
             </div>
 
-            <!-- Real-time Chart -->
-            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 lg:col-span-2">
-                <h2 class="text-lg font-semibold mb-2 text-gray-400">Real-Time Temperature Stream</h2>
-                <div style="height: 300px;"><canvas id="sensorChart"></canvas></div>
+            <!-- Real-time Charts -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="bg-[#2a2d31] p-5 rounded-xl border border-gray-700">
+                    <h2 class="text-lg font-semibold mb-2 text-gray-400">Real-Time Temperature Stream (°C)</h2>
+                    <div style="height: 250px;"><canvas id="tempChart"></canvas></div>
+                </div>
+                <div class="bg-[#2a2d31] p-5 rounded-xl border border-gray-700">
+                    <h2 class="text-lg font-semibold mb-2 text-gray-400">Real-Time Vibration Stream (mm/s)</h2>
+                    <div style="height: 250px;"><canvas id="vibChart"></canvas></div>
+                </div>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- ML Comparison Chart -->
-            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 lg:col-span-2">
+            <div class="bg-[#2a2d31] p-5 rounded-xl border border-gray-700 lg:col-span-2">
                 <h2 class="text-lg font-semibold mb-2 text-gray-400">AI Performance: Actual vs Predicted</h2>
                 <div style="height: 300px;"><canvas id="mlChart"></canvas></div>
             </div>
 
             <!-- Alert Console -->
-            <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+            <div class="bg-[#2a2d31] p-5 rounded-xl border border-gray-700">
                 <h2 class="text-lg font-semibold mb-4 text-red-400 flex items-center gap-2">
                     <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                     Predictive Alert Console
@@ -104,29 +111,42 @@
 
     <script>
         const API_URL = 'http://localhost:8000/api';
-        let sensorChart, mlChart;
+        let tempChart, vibChart, mlChart;
+        const COLORS = ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
         // Initialize Charts
         function initCharts() {
-            const ctxSensor = document.getElementById('sensorChart').getContext('2d');
-            sensorChart = new Chart(ctxSensor, {
-                type: 'line',
-                data: { 
-                    labels: [], 
-                    datasets: [
-                        { label: 'Temp (°C)', data: [], borderColor: '#3b82f6', tension: 0.3, yAxisID: 'y' },
-                        { label: 'Vibration (mm/s)', data: [], borderColor: '#10b981', tension: 0.3, yAxisID: 'yVib' }
-                    ] 
-                },
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false, 
-                    scales: { 
-                        y: { type: 'linear', position: 'left', min: -50, max: 200, title: { display: true, text: 'Temp' } },
-                        yVib: { type: 'linear', position: 'right', min: -1, max: 7, grid: { drawOnChartArea: false }, title: { display: true, text: 'Vibration' } },
-                        x: { display: false } 
-                    } 
+            const chartOptions = (yTitle, yMin, yMax) => ({
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: { legend: { display: false } }, // Remove legends
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'second' },
+                        display: false
+                    },
+                    y: {
+                        min: yMin,
+                        max: yMax,
+                        title: { display: true, text: yTitle }
+                    }
                 }
+            });
+
+            const ctxTemp = document.getElementById('tempChart').getContext('2d');
+            tempChart = new Chart(ctxTemp, {
+                type: 'line',
+                data: { datasets: [] },
+                options: chartOptions('°C', -50, 200)
+            });
+
+            const ctxVib = document.getElementById('vibChart').getContext('2d');
+            vibChart = new Chart(ctxVib, {
+                type: 'line',
+                data: { datasets: [] },
+                options: chartOptions('mm/s', -1, 7)
             });
 
             const ctxML = document.getElementById('mlChart').getContext('2d');
@@ -161,26 +181,45 @@
                 updateStatus('status-bridge', status.bridge);
                 updateStatus('status-inference', status.inference);
                 
-                // Update Sensor Data Chart
+                // Update Configuration Inputs if they are empty
+                if (document.getElementById('input-sensors').value === '') {
+                    document.getElementById('input-sensors').value = status.config.sensor_count;
+                }
+                if (document.getElementById('input-threshold').value === '') {
+                    document.getElementById('input-threshold').value = status.config.ml_threshold;
+                }
+
+                // Update Sensor Data Charts
                 const sensorRes = await fetch(`${API_URL}/data/sensors`);
                 const sensorData = await sensorRes.json();
                 
-                // Group data by timestamp to align lines
-                const labels = [...new Set(sensorData.map(d => d.timestamp))].sort().slice(-30);
-                const temps = [];
-                const vibs = [];
+                const machines = [...new Set(sensorData.map(d => d.machine_id))].sort();
+                
+                const getDatasets = (type) => {
+                    return machines.map((mId, idx) => {
+                        const mData = sensorData
+                            .filter(d => d.machine_id === mId && d.type_capteur === type)
+                            .map(d => ({ x: new Date(d.timestamp), y: d.valeur }))
+                            .sort((a, b) => a.x - b.x);
 
-                labels.forEach(ts => {
-                    const t = sensorData.find(d => d.timestamp === ts && d.type_capteur === 'temperature');
-                    const v = sensorData.find(d => d.timestamp === ts && d.type_capteur === 'vibration');
-                    temps.push(t ? t.valeur : null);
-                    vibs.push(v ? v.valeur : null);
-                });
+                        return {
+                            label: mId,
+                            data: mData,
+                            borderColor: COLORS[idx % COLORS.length],
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            fill: false,
+                            spanGaps: true
+                        };
+                    });
+                };
 
-                sensorChart.data.labels = labels.map(l => new Date(l).toLocaleTimeString());
-                sensorChart.data.datasets[0].data = temps;
-                sensorChart.data.datasets[1].data = vibs;
-                sensorChart.update('none');
+                tempChart.data.datasets = getDatasets('temperature');
+                tempChart.update('none');
+
+                vibChart.data.datasets = getDatasets('vibration');
+                vibChart.update('none');
 
                 // Update ML Chart
                 const mlRes = await fetch(`${API_URL}/data/predictions`);
@@ -188,7 +227,7 @@
                 
                 mlChart.data.labels = mlData.map(d => new Date(d.timestamp).toLocaleTimeString()).reverse();
                 mlChart.data.datasets[0].data = mlData.map(d => d.valeur_actuelle).reverse(); // Temp
-                mlChart.data.datasets[1].data = mlData.map(d => d.ecart).reverse();           // Vib (stored in ecart)
+                mlChart.data.datasets[1].data = mlData.map(d => d.ecart).reverse();           // Vib
                 mlChart.data.datasets[2].data = mlData.map(d => d.valeur_predite).reverse();  // Score
                 mlChart.update('none');
 

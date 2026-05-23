@@ -94,7 +94,7 @@ def get_sensor_data():
         SELECT timestamp, machine_id, valeur, type_capteur 
         FROM mesures_filtrees 
         WHERE type_capteur IN ('temperature', 'vibration')
-        ORDER BY timestamp DESC LIMIT 100
+        ORDER BY timestamp DESC LIMIT 1000
     """)
     data = cur.fetchall()
     cur.close()
