@@ -4,8 +4,8 @@ venv/
 env/
 
 # Documentation & IP
-ml/
-conductor/
+# ml/
+# conductor/
 TECHNICAL_REPORT.md
 *.joblib
 *.pth
